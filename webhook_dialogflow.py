@@ -43,7 +43,7 @@ def webhook():
         expect_user_response=True
 
     #コンテキスト読み込み
-    f=open('context.txt','r')
+    f=open('tmp/context.txt','r')
     context=f.read()
     f.close()
 
@@ -64,7 +64,7 @@ def webhook():
 
 
     #contextの書き込み
-    f=open('context.txt','w')
+    f=open('tmp/context.txt','w')
     f.write(context)
     f.close()
 
