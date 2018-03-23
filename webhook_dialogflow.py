@@ -13,197 +13,70 @@ import datetime
 from flask import Flask
 from flask import request
 from flask import make_response, jsonify
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 
-import pandas as pd
-from gspread_dataframe import get_as_dataframe
 
 
 # Flask app should start in global layout
 app = Flask(__name__)
 
-
 @app.route('/webhook', methods=['POST'])
 def webhook():
-	'''
-	req = request.get_json(silent=True, force=True)
-	result = req.get("result")
-	parameters = result.get("parameters")
-	event_date = parameters.get("Event_date")
-	place_query=parameters.get("Place")
-	date_query=parameters.get("date")
-	'''
-	event_date = 'today'
-	place_query=''
-	date_query=''	
-	
-	now=datetime.datetime.now()
 
-	if event_date=='today':
-		event_date= str(now.year)+"年"+str(now.month)+"月"+str(now.day)+"日"
-		speak_date="今日"
-	elif event_date=='tomorrow':
-		event_date= str(now.year)+"年"+str(now.month)+"月"+str(now.day+1)+"日"
-		speak_date="明日"
-	elif event_date=='' :
-		if date_query=='':
-			event_date= str(now.year)+"年"+str(now.month)+"月"+str(now.day)+"日"
-			speak_date="今日"			
-		else:
-			dt_format=datetime.datetime.strptime(date_query,'%Y-%m-%d')
-			event_date= str(dt_format.year)+"年"+str(dt_format.month)+"月"+str(dt_format.day)+"日"
-			speak_date=str(dt_format.month)+"月"+str(dt_format.day)+"日"			
-			
-	scope = ['https://www.googleapis.com/auth/drive']
-	
-    #ダウンロードしたjsonファイルを同じフォルダに格納して指定する
-	credentials = ServiceAccountCredentials.from_json_keyfile_name('My First Project-fc3744a8d618.json', scope)
-	gc = gspread.authorize(credentials)
-	
-	# # 共有設定したスプレッドシートの名前を指定する
-	worksheet = gc.open("Event_Info").sheet1
+    KEY = '43397658736754614d654a3134684733765139674c35416151562e734965534a54746b57736b4b37706c32'
 
-	#dataframeにする
-	df = get_as_dataframe(worksheet, parse_dates=False,index=None)
+    #エンドポイントの設定
+    endpoint = 'https://api.apigw.smt.docomo.ne.jp/dialogue/v1/dialogue?APIKEY=REGISTER_KEY'
+    url = endpoint.replace('REGISTER_KEY', KEY)
+
+    #dialogflowから送られたユーザークエリから、テキストを抽出
+    #contextはどうやって保持しようねー。同じフォルダに格納する？
+    req = request.get_json(silent=True, force=True)
+    result=req.get("result")
+    parameters = result.get("parameters")
+    query=parameters.get("any")
+
+    #終わりか否か
+    if query=='終了' or query=='終わり' or query=='止めて' or query=='とめて':
+        expect_user_response=False
+    else:
+        expect_user_response=True
+
+    #コンテキスト読み込み
+    f=open('context.txt','r')
+    context=f.read()
+    f.close()
+
+    #ドコモに接続して返事をもらう。
+    payload = {'utt' : query, 'context':context,'nickname':'益子','nickname_y':'ますこ','sex':'男','age':'26'}
+    headers = {'Content-type': 'application/json'}
+
+    #送信
+    if expect_user_response:
+        r = requests.post(url, data=json.dumps(payload), headers=headers)
+        data = r.json()
+        #jsonの解析
+        text = data['utt']
+        context = data['context']
+    else:
+        text='楽しかったです。またお話しましょう。'
+        context=''
 
 
-	#TODO ここから下はdataframeとして操作
-	text=""
+    #contextの書き込み
+    f=open('context.txt','w')
+    f.write(context)
+    f.close()
 
-	#event_dateしかなかった場合は、日付のみでフィルタリングする
-	#または、All Areaでもこの条件を使う。
-	if place_query=='' or place_query=='All':
-		df_filtered=df[df['日付'].isin([event_date])]
-		length=len(df_filtered.index)
-		
-		#指定した日付のピタリ賞があった場合
-		if length>0:
-			titles=df_filtered['イベント名'].values.tolist()
-			places=df_filtered['場所'].values.tolist()
-			timestamps=df_filtered['時間'].values.tolist()
-			regions=df_filtered['地区'].values.tolist()
-			text=speak_date+'は、'
 
-			for i in range(length):
-				if i>0:
-					text=text+'また、'
-				if timestamps[i]=='-':
-					text=text+places[i] +"で"+titles[i]+"があります。"
-				else:
-					text=text+places[i] +"で"+timestamps[i]+"から"+titles[i]+"があります。"
-			text=text+'お出かけしてみてはいかがでしょうか。'
-		#なかった場合、一番近いものを持ってくる
-		else:
-			Founded=False
-			date_list=df['日付'].values.tolist()
-			dt_format_query=datetime.datetime.strptime(event_date,'%Y年%m月%d日')
-
-			for j in range(1,len(date_list)):
-				#datetimeに変換
-				dt_format=datetime.datetime.strptime(date_list[j],'%Y年%m月%d日')
-				if dt_format_query<dt_format:
-					df_filtered=df[df['日付'].isin([date_list[j]])]
-					Founded=True
-					break
-			if Founded:
-				length=len(df_filtered.index)
-				titles=df_filtered['イベント名'].values.tolist()
-				places=df_filtered['場所'].values.tolist()
-				timestamps=df_filtered['時間'].values.tolist()
-				regions=df_filtered['地区'].values.tolist()
-				text=speak_date+'はイベントはありません。近い日にちだと、'+str(date_list[j]).replace('2018年','')+'に'
-
-				for i in range(length):
-					if i>0:
-						text=text+'また、'
-					if timestamps[i]=='-':
-						text=text+places[i] +"で"+titles[i]+"があります。"
-					else:
-						text=text+places[i] +"で"+timestamps[i]+"から"+titles[i]+"があります。"
-				text=text+'お出かけしてみてはいかがでしょうか。'
-			else:
-				text='すみません。あまり先の日程まではわかりません。'
-
-	#地区の指定があった場合は地区でもフィルタリングする
-	elif place_query!='':
-		df_filtered=df[df['日付'].isin([event_date])]
-		df_filtered=df_filtered[df_filtered['地区'].isin([place_query,'All Area'])]
-		length=len(df_filtered.index)
-		#指定した日付と地区のピタリ賞があった場合
-		if length>0:
-			titles=df_filtered['イベント名'].values.tolist()
-			places=df_filtered['場所'].values.tolist()
-			timestamps=df_filtered['時間'].values.tolist()
-			regions=df_filtered['地区'].values.tolist()
-			text=speak_date+'は、'
-
-			for i in range(length):
-				if i>0:
-					text=text+'また、'
-				if timestamps[i]=='-':
-					text=text+places[i] +"で"+titles[i]+"があります。"
-				else:
-					text=text+places[i] +"で"+timestamps[i]+"から"+titles[i]+"があります。"
-	
-		#なかった場合、一番近いものを持ってくる
-		else:
-			df_filtered=df[df['地区'].isin([place_query])]
-			date_list=df_filtered['日付'].values.tolist()
-			dt_format_query=datetime.datetime.strptime(event_date,'%Y年%m月%d日')
-			#listの長さがあった場合
-			if len(date_list)>0:
-				Founded=False
-				for j in range(1,len(date_list)):
-					#datetimeに変換
-					dt_format=datetime.datetime.strptime(date_list[j],'%Y年%m月%d日')
-					
-					if dt_format_query<dt_format:
-						df_filtered=df_filtered[df_filtered['日付'].isin([date_list[j]])]
-						Founded=True
-						break
-				if Founded:
-					length=len(df_filtered.index)
-					titles=df_filtered['イベント名'].values.tolist()
-					places=df_filtered['場所'].values.tolist()
-					timestamps=df_filtered['時間'].values.tolist()
-					regions=df_filtered['地区'].values.tolist()
-					text='指定した地区ではイベントはありません。近い日にちだと、'+str(date_list[j]).replace('2018年','')+'に'
-
-					for i in range(length):
-						if i>0:
-							text=text+'また、'
-						if timestamps[i]=='-':
-							text=text+places[i] +"で"+titles[i]+"があります。"
-						else:
-							text=text+places[i] +"で"+timestamps[i]+"から"+titles[i]+"があります。"
-				else:
-					text='すみません。あまり先の日程まではわかりません。'
-			#日付が見つからなかった場合
-			else:
-				text='しばらく、指定した地区ではイベントはありません。ホームページの更新をお待ちください。'
-	
-	#テキストを加工する。かっこが入っているものを消す
-	try:
-		text=text.replace('(いまいずみだい)','')
-	except:
-		pass
-	try:
-		text=text.replace('(おおひらやま)','')
-	except:
-		pass
-	try:
-		text=text.replace('町内会館','ちょーなぃかぃかん')
-	except:
-		pass
-	
-	r = make_response(jsonify({'speech':text,'displayText':text,'data':{'google':{'expect_user_response':False,'no_input_prompts':[],'is_ssml':False}}}))
-	r.headers['Content-Type'] = 'application/json'
-	
-	return r
+    #Google homeに返す
+    r = make_response(jsonify({'speech':text,'displayText':text,'data':{'google':{'expect_user_response':expect_user_response,'no_input_prompts':[],'is_ssml':False}}}))
+    r.headers['Content-Type'] = 'application/json'
+    
+    return r
 
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 5000))
     print("Starting app on port %d" % port)
     app.run(debug=False, port=port, host='0.0.0.0')
+
