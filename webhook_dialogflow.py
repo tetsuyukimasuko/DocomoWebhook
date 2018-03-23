@@ -70,7 +70,7 @@ def webhook():
 
 
     #Google homeに返す
-    r = make_response(jsonify({'speech':text,'displayText':text,'data':{'google':{'expect_user_response':expect_user_response,'no_input_prompts':[],'is_ssml':False}}}))
+    r = make_response(jsonify({'speech':text+context,'displayText':text,'data':{'google':{'expect_user_response':expect_user_response,'no_input_prompts':[],'is_ssml':False}}}))
     r.headers['Content-Type'] = 'application/json'
     
     return r
