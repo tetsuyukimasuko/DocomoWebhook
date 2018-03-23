@@ -14,6 +14,7 @@ from flask import Flask
 from flask import request
 from flask import make_response, jsonify
 
+import requests
 
 
 # Flask app should start in global layout
