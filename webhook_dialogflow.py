@@ -48,7 +48,7 @@ def webhook():
     f.close()
 
     #ドコモに接続して返事をもらう。
-    payload = {'utt' : query, 'context':context,'nickname':'益子','nickname_y':'ますこ','sex':'男','age':'26'}
+    payload = {'utt' : query, 'context':context,'nickname':'回谷','nickname_y':'かいや','sex':'男','age':'44'}
     headers = {'Content-type': 'application/json'}
 
     #送信
